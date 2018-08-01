@@ -71,7 +71,17 @@ public class NativeSSTableLoaderClient extends SSTableLoader.Client
 
         try (Cluster cluster = builder.build(); Session session = cluster.connect())
         {
-
+            HashMap<InetAddress,InetAddress> RPCToListen = new HashMap<InetAddress,InetAddress>();
+            ResultSet rs = session.execute("select listen_address, rpc_address from system.local");
+            for (Row r : rs)
+            {
+                RPCToListen.put(r.getInet("rpc_address"),r.getInet("listen_address"));
+            }
+            ResultSet peerRs = session.execute("select peer, rpc_address from system.peers");
+            for (Row peerR : peerRs)
+            {
+                RPCToListen.put(peerR.getInet("rpc_address"),peerR.getInet("peer"));
+            }
             Metadata metadata = cluster.getMetadata();
 
             Set<TokenRange> tokenRanges = metadata.getTokenRanges();
@@ -85,7 +95,7 @@ public class NativeSSTableLoaderClient extends SSTableLoader.Client
                 Range<Token> range = new Range<>(tokenFactory.fromString(tokenRange.getStart().getValue().toString()),
                                                  tokenFactory.fromString(tokenRange.getEnd().getValue().toString()));
                 for (Host endpoint : endpoints)
-                    addRangeForEndpoint(range, endpoint.getAddress());
+                    addRangeForEndpoint(range, RPCToListen.get(endpoint.getAddress()));
             }
 
             Types types = fetchTypes(keyspace, session);
